@@ -1,0 +1,543 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔥 Fire Games</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{overflow:hidden;background:#101015;color:white;font-family:Arial,sans-serif}
+#game{position:fixed;inset:0}
+canvas{display:block}
+.hidden{display:none!important}
+
+.menu{
+position:fixed;inset:0;z-index:5;
+display:flex;align-items:center;justify-content:center;
+background:rgba(10,10,15,.82);
+padding:20px
+}
+.menu-card{
+width:100%;max-width:390px;padding:38px 30px;
+text-align:center;background:#171720;
+border:1px solid #ff7138;border-radius:18px
+}
+.logo{font-size:34px;font-weight:900;color:#ff7138}
+.subtitle{margin:12px 0 30px;color:#aaa;letter-spacing:4px;font-size:12px}
+label{display:block;text-align:left;margin-bottom:8px;font-size:11px}
+input{
+width:100%;padding:14px;background:#101017;
+border:1px solid #41414c;border-radius:8px;
+color:white;font-size:15px;outline:none
+}
+button{
+padding:14px;border:0;border-radius:8px;
+background:linear-gradient(90deg,#ff5722,#ff8a30);
+color:white;font-weight:bold;cursor:pointer
+}
+#playButton{width:100%;margin-top:16px}
+#menuMessage{margin-top:16px;color:#aaa;font-size:12px}
+
+.hud{position:fixed;inset:0;z-index:3;pointer-events:none}
+.hud-top{display:flex;justify-content:space-between;padding:22px}
+.hud-brand{color:#ff7138;font-size:20px;font-weight:900}
+.online{padding:10px 13px;background:#15151dcc;border-radius:20px;font-size:11px}
+.instructions{
+position:absolute;top:90px;left:22px;
+display:flex;flex-direction:column;gap:8px;
+padding:14px;background:#101015bb;border-radius:10px;font-size:11px
+}
+.instructions strong{color:#ff8a50}
+#crosshair{
+position:absolute;top:50%;left:50%;
+transform:translate(-50%,-50%);font-size:28px
+}
+.toast{
+position:absolute;top:22%;left:50%;
+transform:translate(-50%,-10px);
+padding:10px 18px;background:#15151ddd;
+border:1px solid #ff7138;border-radius:8px;
+opacity:0;transition:.2s
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+#exitButton{
+position:absolute;right:22px;bottom:22px;
+pointer-events:auto;background:#222;border:1px solid #ff7138
+}
+@media(max-width:600px){
+.logo{font-size:27px}
+.instructions{top:auto;bottom:75px;left:12px}
+.hud-top{padding:13px}
+}
+</style>
+
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+
+<script type="importmap">
+{
+ "imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js"
+ }
+}
+</script>
+</head>
+
+<body>
+<div id="game"></div>
+
+<section id="menu" class="menu">
+ <div class="menu-card">
+  <div class="logo">🔥 FIRE GAMES</div>
+  <p class="subtitle">ENTER THE ISLAND</p>
+  <label for="playerName">YOUR PLAYER NAME</label>
+  <input id="playerName" maxlength="16" value="Player" placeholder="Enter name">
+  <button id="playButton">PLAY NOW</button>
+  <p id="menuMessage">Connecting to server...</p>
+ </div>
+</section>
+
+<div id="hud" class="hud hidden">
+ <div class="hud-top">
+  <div class="hud-brand">🔥 FIRE GAMES</div>
+  <div class="online">🟢 <span id="onlineCount">1</span> ONLINE</div>
+ </div>
+
+ <div class="instructions">
+  <strong>CONTROLS</strong>
+  <span>WASD — Move</span>
+  <span>Mouse — Look</span>
+  <span>SPACE — Energy pulse</span>
+  <span>ESC — Unlock mouse</span>
+ </div>
+
+ <div id="crosshair">+</div>
+ <div id="toast" class="toast"></div>
+ <button id="exitButton">EXIT</button>
+</div>
+
+<script type="module">
+import * as THREE from "three";
+
+const socket = window.io ? io() : null;
+
+const $ = id => document.getElementById(id);
+const game = $("game");
+const menu = $("menu");
+const hud = $("hud");
+
+let scene, camera, renderer;
+let myId = null;
+let playing = false;
+let pointerLocked = false;
+let yaw = 0;
+let pitch = -0.12;
+
+const position = new THREE.Vector3();
+const keys = {};
+const remotePlayers = new Map();
+const effects = [];
+
+const clock = new THREE.Clock();
+
+function toast(message){
+ const el = $("toast");
+ el.textContent = message;
+ el.classList.add("show");
+ setTimeout(()=>el.classList.remove("show"),1600);
+}
+
+function material(color){
+ return new THREE.MeshStandardMaterial({color,roughness:.9});
+}
+
+function box(x,y,z,sx,sy,sz,color){
+ const mesh = new THREE.Mesh(
+  new THREE.BoxGeometry(sx,sy,sz),material(color)
+ );
+ mesh.position.set(x,y,z);
+ mesh.castShadow=true;
+ mesh.receiveShadow=true;
+ scene.add(mesh);
+ return mesh;
+}
+
+function createWorld(){
+ scene = new THREE.Scene();
+ scene.background = new THREE.Color(0x91c8e8);
+ scene.fog = new THREE.Fog(0x91c8e8,55,125);
+
+ camera = new THREE.PerspectiveCamera(
+  75,innerWidth/innerHeight,.1,180
+ );
+
+ renderer = new THREE.WebGLRenderer({antialias:true});
+ renderer.setSize(innerWidth,innerHeight);
+ renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+ renderer.shadowMap.enabled=true;
+ game.appendChild(renderer.domElement);
+
+ scene.add(new THREE.HemisphereLight(0xffffff,0x526044,2));
+
+ const sun = new THREE.DirectionalLight(0xffffff,2.3);
+ sun.position.set(25,45,20);
+ sun.castShadow=true;
+ scene.add(sun);
+
+ const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(110,110),
+  material(0x537e43)
+ );
+ ground.rotation.x=-Math.PI/2;
+ ground.receiveShadow=true;
+ scene.add(ground);
+
+ const border = new THREE.Mesh(
+  new THREE.RingGeometry(47,54,64),
+  material(0xd5bd7b)
+ );
+ border.rotation.x=-Math.PI/2;
+ border.position.y=.02;
+ scene.add(border);
+
+ const boundary = new THREE.Mesh(
+  new THREE.RingGeometry(45.7,46.1,96),
+  new THREE.MeshBasicMaterial({
+   color:0xff873d,
+   side:THREE.DoubleSide
+  })
+ );
+ boundary.rotation.x=-Math.PI/2;
+ boundary.position.y=.08;
+ scene.add(boundary);
+
+ createBuildings();
+ createTrees();
+ createRocks();
+}
+
+function createBuildings(){
+ const buildings=[
+  [-17,-14,9,6,0xb8a18b],
+  [18,-16,8,7,0x8e9eaa],
+  [-20,18,7,8,0xc6b18c],
+  [19,18,9,6,0x9e9b8e],
+  [0,-25,12,7,0xa4a1b5]
+ ];
+
+ for(const [x,z,w,d,c] of buildings){
+  box(x,2,z,w,4,d,c);
+  box(x,4.2,z,w+.5,.4,d+.5,0x574b42);
+  box(x,1,z+d/2+.02,1.2,2,.08,0x49352b);
+  box(x-w/3,2.5,z+d/2+.04,1.2,1,.08,0x8ed6ed);
+  box(x+w/3,2.5,z+d/2+.04,1.2,1,.08,0x8ed6ed);
+ }
+}
+
+function createTree(x,z,s=1){
+ const trunk=new THREE.Mesh(
+  new THREE.CylinderGeometry(.25*s,.35*s,2*s,7),
+  material(0x765033)
+ );
+ trunk.position.set(x,s,z);
+ trunk.castShadow=true;
+ scene.add(trunk);
+
+ const leaves=new THREE.Mesh(
+  new THREE.ConeGeometry(1.5*s,3.5*s,8),
+  material(0x286c38)
+ );
+ leaves.position.set(x,3*s,z);
+ leaves.castShadow=true;
+ scene.add(leaves);
+}
+
+function createTrees(){
+ const positions=[
+  [-32,-28],[-30,0],[-33,27],[32,-29],
+  [31,2],[33,29],[-8,33],[10,34],
+  [-8,-36],[10,-36],[-38,-12],[38,15]
+ ];
+ positions.forEach(([x,z],i)=>createTree(x,z,.8+(i%3)*.15));
+}
+
+function createRocks(){
+ for(let i=0;i<24;i++){
+  const rock=new THREE.Mesh(
+   new THREE.DodecahedronGeometry(.4+Math.random()*.7),
+   material(0x777d79)
+  );
+  rock.position.set(Math.random()*76-38,.45,Math.random()*76-38);
+  rock.rotation.set(Math.random(),Math.random(),Math.random());
+  rock.castShadow=true;
+  scene.add(rock);
+ }
+}
+
+function nameLabel(name){
+ const canvas=document.createElement("canvas");
+ canvas.width=256;
+ canvas.height=64;
+ const ctx=canvas.getContext("2d");
+ ctx.fillStyle="rgba(0,0,0,.65)";
+ ctx.fillRect(0,0,256,64);
+ ctx.font="bold 28px Arial";
+ ctx.textAlign="center";
+ ctx.fillStyle="white";
+ ctx.fillText(name.slice(0,16),128,42);
+
+ const texture=new THREE.CanvasTexture(canvas);
+ const sprite=new THREE.Sprite(
+  new THREE.SpriteMaterial({map:texture,transparent:true})
+ );
+ sprite.scale.set(2.8,.7,1);
+ sprite.position.y=2.8;
+ sprite.userData.name=name;
+ return sprite;
+}
+
+function createPlayer(data){
+ const group=new THREE.Group();
+
+ const body=new THREE.Mesh(
+  new THREE.CapsuleGeometry(.42,.85,4,8),
+  material(data.color||0xff7138)
+ );
+ body.position.y=.95;
+ body.castShadow=true;
+ group.add(body);
+
+ const head=new THREE.Mesh(
+  new THREE.SphereGeometry(.32,16,12),
+  material(0xffd0a6)
+ );
+ head.position.y=1.8;
+ group.add(head);
+
+ group.add(nameLabel(data.name||"Player"));
+ group.position.set(data.x||0,0,data.z||0);
+ group.rotation.y=data.rotation||0;
+ scene.add(group);
+ return group;
+}
+
+function removePlayer(id){
+ const model=remotePlayers.get(id);
+ if(!model)return;
+ scene.remove(model);
+ model.traverse(obj=>{
+  if(obj.geometry)obj.geometry.dispose();
+  if(obj.material){
+   if(Array.isArray(obj.material))obj.material.forEach(m=>m.dispose());
+   else obj.material.dispose();
+  }
+ });
+ remotePlayers.delete(id);
+}
+
+function addPlayer(data){
+ if(!data||data.id===myId)return;
+ removePlayer(data.id);
+ remotePlayers.set(data.id,createPlayer(data));
+}
+
+function movePlayer(data){
+ let model=remotePlayers.get(data.id);
+ if(!model){
+  addPlayer(data);
+  return;
+ }
+ model.position.set(data.x,0,data.z);
+ model.rotation.y=data.rotation;
+
+ const label=model.children[model.children.length-1];
+ if(label?.userData.name!==data.name){
+  model.remove(label);
+  model.add(nameLabel(data.name||"Player"));
+ }
+}
+
+function pulse(x,z,color=0xff9b43){
+ const ring=new THREE.Mesh(
+  new THREE.RingGeometry(.5,.8,48),
+  new THREE.MeshBasicMaterial({
+   color,transparent:true,opacity:.9,
+   side:THREE.DoubleSide
+  })
+ );
+ ring.rotation.x=-Math.PI/2;
+ ring.position.set(x,.15,z);
+ scene.add(ring);
+ effects.push({mesh:ring,age:0,duration:.8});
+}
+
+function updateEffects(dt){
+ for(let i=effects.length-1;i>=0;i--){
+  const e=effects[i];
+  e.age+=dt;
+  const p=e.age/e.duration;
+  e.mesh.scale.setScalar(1+p*7);
+  e.mesh.material.opacity=Math.max(0,1-p);
+  if(p>=1){
+   scene.remove(e.mesh);
+   e.mesh.geometry.dispose();
+   e.mesh.material.dispose();
+   effects.splice(i,1);
+  }
+ }
+}
+
+function startGame(){
+ if(playing)return;
+ if(socket&&!socket.connected){
+  $("menuMessage").textContent="Waiting for server...";
+  return;
+ }
+
+ const name=$("playerName").value.trim().slice(0,16)||"Player";
+ if(socket)socket.emit("setName",name);
+
+ playing=true;
+ menu.classList.add("hidden");
+ hud.classList.remove("hidden");
+
+ position.set(Math.random()*12-6,0,Math.random()*12-6);
+
+ renderer.domElement.requestPointerLock?.();
+ toast("Welcome to Fire Games!");
+}
+
+function exitGame(){
+ playing=false;
+ hud.classList.add("hidden");
+ menu.classList.remove("hidden");
+ if(document.pointerLockElement)document.exitPointerLock();
+}
+
+function movement(dt){
+ if(!playing)return;
+
+ let forward=0,side=0;
+ if(keys.KeyW)forward++;
+ if(keys.KeyS)forward--;
+ if(keys.KeyD)side++;
+ if(keys.KeyA)side--;
+
+ const length=Math.hypot(forward,side);
+ if(length>0){
+  forward/=length;
+  side/=length;
+
+  const speed=8*dt;
+  position.x+=(-Math.sin(yaw)*forward+Math.cos(yaw)*side)*speed;
+  position.z+=(-Math.cos(yaw)*forward-Math.sin(yaw)*side)*speed;
+
+  position.x=THREE.MathUtils.clamp(position.x,-46,46);
+  position.z=THREE.MathUtils.clamp(position.z,-46,46);
+ }
+
+ camera.position.set(position.x,1.7,position.z);
+ camera.rotation.order="YXZ";
+ camera.rotation.y=yaw;
+ camera.rotation.x=pitch;
+}
+
+function animate(){
+ requestAnimationFrame(animate);
+ const dt=Math.min(clock.getDelta(),.05);
+ movement(dt);
+ updateEffects(dt);
+ renderer.render(scene,camera);
+}
+
+function resize(){
+ if(!camera||!renderer)return;
+ camera.aspect=innerWidth/innerHeight;
+ camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth,innerHeight);
+}
+
+$("playButton").addEventListener("click",startGame);
+$("exitButton").addEventListener("click",exitGame);
+
+document.addEventListener("keydown",e=>{
+ keys[e.code]=true;
+ if(e.code==="Space"&&playing&&!e.repeat){
+  if(socket)socket.emit("pulse");
+  pulse(position.x,position.z);
+ }
+});
+
+document.addEventListener("keyup",e=>keys[e.code]=false);
+
+document.addEventListener("mousemove",e=>{
+ if(!pointerLocked||!playing)return;
+ yaw-=e.movementX*.002;
+ pitch-=e.movementY*.002;
+ pitch=THREE.MathUtils.clamp(pitch,-1.25,1.25);
+});
+
+document.addEventListener("pointerlockchange",()=>{
+ pointerLocked=document.pointerLockElement===renderer.domElement;
+ if(playing&&!pointerLocked)toast("Click game screen to look around");
+});
+
+window.addEventListener("resize",resize);
+
+if(socket){
+ socket.on("connect",()=>{
+  $("menuMessage").textContent="Connected! Enter your name and play.";
+ });
+
+ socket.on("disconnect",()=>{
+  $("menuMessage").textContent="Disconnected. Refresh to reconnect.";
+  toast("Connection lost");
+ });
+
+ socket.on("welcome",data=>{
+  myId=data.id;
+  data.players.forEach(p=>addPlayer(p));
+ });
+
+ socket.on("playerJoined",p=>{
+  addPlayer(p);
+  toast((p.name||"Player")+" joined");
+ });
+
+ socket.on("playerUpdated",p=>{
+  if(p.id===myId)return;
+  const model=remotePlayers.get(p.id);
+  if(model){
+   const old=model.children[model.children.length-1];
+   model.remove(old);
+   model.add(nameLabel(p.name||"Player"));
+  }
+ });
+
+ socket.on("playerMoved",movePlayer);
+ socket.on("playerLeft",id=>removePlayer(id));
+ socket.on("onlineCount",count=>$("onlineCount").textContent=count);
+ socket.on("playerPulse",data=>pulse(data.x,data.z,0x55d9ff));
+}else{
+ $("menuMessage").textContent="Multiplayer server not connected.";
+}
+
+createWorld();
+camera.position.set(0,1.7,8);
+animate();
+
+// Send movement updates to the multiplayer server.
+setInterval(()=>{
+ if(playing&&socket?.connected){
+  socket.emit("move",{
+   x:position.x,
+   z:position.z,
+   rotation:yaw
+  });
+ }
+},80);
+
+</script>
+</body>
+</html>
