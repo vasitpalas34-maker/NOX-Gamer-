@@ -408,21 +408,6 @@
             opacity: 0.95;
             transform: translateY(-2px);
         }
-    
-        /* Playable Neon Dodge mini-game */
-        .arcade-section { max-width: 1200px; margin: 45px auto; padding: 0 20px; }
-        .arcade-panel { background: #0f172a; border: 1px solid #1e293b; border-radius: 16px; padding: 22px; }
-        .arcade-top { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
-        .arcade-top h2 { color:#00f2fe; }
-        .game-stats { display:flex; gap:10px; flex-wrap:wrap; color:#cbd5e1; }
-        .game-stats span { background:#1e293b; padding:8px 12px; border-radius:9px; }
-        #gameCanvas { display:block; width:100%; max-width:760px; height:auto; margin:0 auto; background:#080d18; border:1px solid #334155; border-radius:12px; touch-action: none; }
-        .game-controls { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-top:15px; }
-        .game-btn { background:linear-gradient(135deg,#00f2fe,#4facfe); color:#07111d; border:0; padding:10px 18px; border-radius:9px; font-weight:800; cursor:pointer; }
-        .game-help { color:#94a3b8; text-align:center; margin-top:12px; font-size:14px; }
-        .game-message { text-align:center; color:#f8fafc; min-height:24px; margin-top:10px; font-weight:700; }
-        @media (max-width:700px) { header { padding:14px 18px; flex-wrap:wrap; gap:14px; } nav ul { gap:14px; flex-wrap:wrap; } .hero h1 { font-size:34px; } }
-
     </style>
 </head>
 <body>
@@ -437,8 +422,8 @@
         <nav>
             <ul>
                 <li><a href="platform.html" class="active">Home</a></li>
-                <li><a href="#">Tournaments</a></li>
-                <li><a href="#">Streams</a></li>
+                <li><a href="open world game3.html">Tournaments</a></li>
+                <li><a href="NOc game.html">Streams</a></li>
                 <li><a href="#">Community</a></li>
             </ul>
         </nav>
@@ -460,34 +445,6 @@
         <p>The ultimate gaming hub powered by top players and epic community tournaments. Jump in and play!</p>
     </section>
 
-
-    <section class="arcade-section" id="arcade">
-        <div class="section-header">
-            <div>
-                <h2>Neon Dodge Arcade</h2>
-                <p>Play a quick skill game right here in Nox GamingHub.</p>
-            </div>
-        </div>
-        <div class="arcade-panel">
-            <div class="arcade-top">
-                <h2>⚡ Neon Dodge</h2>
-                <div class="game-stats">
-                    <span>Score: <b id="score">0</b></span>
-                    <span>Best: <b id="bestScore">0</b></span>
-                    <span>Level: <b id="level">1</b></span>
-                </div>
-            </div>
-            <canvas id="gameCanvas" width="760" height="420" aria-label="Neon Dodge game area"></canvas>
-            <div class="game-controls">
-                <button class="game-btn" id="startGame">Start game</button>
-                <button class="game-btn" id="leftBtn" aria-label="Move left">◀ Left</button>
-                <button class="game-btn" id="rightBtn" aria-label="Move right">Right ▶</button>
-            </div>
-            <p class="game-help">Move with ← → or A / D. On a phone, use the Left and Right buttons. Avoid the falling blocks!</p>
-            <p class="game-message" id="gameMessage">Press “Start game” to play.</p>
-        </div>
-    </section>
-
     <!-- Restriction Gamers Section -->
     <section class="restriction-section">
         <div class="section-header">
@@ -503,7 +460,7 @@
 		<nav>
     <ul>
         <li><a href="platform.html">Home</a></li> <!-- LINKED BACK TO LANDING PAGE -->
-        <li><a href="#arcade">Arcade</a></li>
+        <li><a href="game!1.html">Arcade</a></li>
         <li><a href="car selation garage.html" class="active">3D car rac racing</a></li>
         <li><a href="platform2.html">Tournaments</a></li>
     </ul>
@@ -623,137 +580,6 @@
                 document.getElementById(btn.dataset.target).classList.add('active');
             });
         });
-    
-
-        // Neon Dodge: all gameplay runs locally in this browser.
-        (() => {
-            const canvas = document.getElementById('gameCanvas');
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            const scoreEl = document.getElementById('score');
-            const bestEl = document.getElementById('bestScore');
-            const levelEl = document.getElementById('level');
-            const messageEl = document.getElementById('gameMessage');
-            const startBtn = document.getElementById('startGame');
-            const player = { x: 365, y: 365, w: 30, h: 30, speed: 6 };
-            let blocks = [], score = 0, level = 1, running = false, gameOver = false;
-            let left = false, right = false, lastSpawn = 0, animationId = 0;
-            let best = 0;
-            try { best = Number(localStorage.getItem('noxNeonDodgeBest') || 0); } catch (_) {}
-            bestEl.textContent = best;
-
-            function draw() {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.strokeStyle = 'rgba(0,242,254,.12)';
-                ctx.lineWidth = 1;
-                for (let x = 0; x < canvas.width; x += 38) {
-                    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-                }
-                for (let y = 0; y < canvas.height; y += 38) {
-                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-                }
-                // Player
-                ctx.shadowColor = '#00f2fe'; ctx.shadowBlur = 18;
-                ctx.fillStyle = '#00f2fe';
-                ctx.fillRect(player.x, player.y, player.w, player.h);
-                ctx.shadowBlur = 0;
-                // Falling blocks
-                blocks.forEach(b => {
-                    ctx.shadowColor = '#ff416c'; ctx.shadowBlur = 14;
-                    ctx.fillStyle = '#ff416c'; ctx.fillRect(b.x, b.y, b.w, b.h);
-                });
-                ctx.shadowBlur = 0;
-                if (!running && !gameOver) {
-                    ctx.fillStyle = 'rgba(5,10,20,.68)'; ctx.fillRect(0,0,canvas.width,canvas.height);
-                    ctx.fillStyle = '#fff'; ctx.font = 'bold 30px Segoe UI'; ctx.textAlign = 'center';
-                    ctx.fillText('NEON DODGE', canvas.width/2, 185);
-                    ctx.font = '16px Segoe UI'; ctx.fillStyle = '#94a3b8';
-                    ctx.fillText('Press Start game', canvas.width/2, 220);
-                }
-            }
-
-            function reset() {
-                cancelAnimationFrame(animationId);
-                player.x = canvas.width / 2 - player.w / 2;
-                blocks = []; score = 0; level = 1; lastSpawn = 0;
-                scoreEl.textContent = score; levelEl.textContent = level;
-                running = true; gameOver = false;
-                messageEl.textContent = 'Good luck! Keep moving.';
-                startBtn.textContent = 'Restart game';
-                animationId = requestAnimationFrame(loop);
-            }
-
-            function endGame() {
-                running = false; gameOver = true;
-                if (score > best) {
-                    best = score; bestEl.textContent = best;
-                    try { localStorage.setItem('noxNeonDodgeBest', String(best)); } catch (_) {}
-                }
-                messageEl.textContent = `Game over! Your score: ${score}. Press Restart game to try again.`;
-                draw();
-            }
-
-            function loop(timestamp) {
-                if (!running) return;
-                if (left) player.x -= player.speed;
-                if (right) player.x += player.speed;
-                player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
-
-                const spawnDelay = Math.max(260, 900 - level * 55);
-                if (timestamp - lastSpawn > spawnDelay) {
-                    const size = 18 + Math.random() * 24;
-                    blocks.push({ x: Math.random() * (canvas.width - size), y: -size, w: size, h: size, speed: 2.5 + level * .45 + Math.random() * 1.5 });
-                    lastSpawn = timestamp;
-                }
-
-                blocks.forEach(b => b.y += b.speed);
-                blocks = blocks.filter(b => b.y < canvas.height + b.h);
-                for (const b of blocks) {
-                    if (player.x < b.x + b.w && player.x + player.w > b.x &&
-                        player.y < b.y + b.h && player.y + player.h > b.y) {
-                        endGame(); return;
-                    }
-                }
-                score += 1;
-                level = 1 + Math.floor(score / 500);
-                scoreEl.textContent = score;
-                levelEl.textContent = level;
-                draw();
-                animationId = requestAnimationFrame(loop);
-            }
-
-            function setKey(e, value) {
-                const key = e.key.toLowerCase();
-                if (['arrowleft','arrowright','a','d',' '].includes(key)) e.preventDefault();
-                if (key === 'arrowleft' || key === 'a') left = value;
-                if (key === 'arrowright' || key === 'd') right = value;
-                if (key === ' ' && value && !running) reset();
-            }
-            window.addEventListener('keydown', e => setKey(e, true));
-            window.addEventListener('keyup', e => setKey(e, false));
-            window.addEventListener('blur', () => { left = false; right = false; });
-            startBtn.addEventListener('click', reset);
-
-            function holdButton(button, direction) {
-                const down = e => { e.preventDefault(); if (direction === 'left') left = true; else right = true; };
-                const up = () => { if (direction === 'left') left = false; else right = false; };
-                button.addEventListener('pointerdown', down);
-                ['pointerup','pointerleave','pointercancel'].forEach(type => button.addEventListener(type, up));
-            }
-            holdButton(document.getElementById('leftBtn'), 'left');
-            holdButton(document.getElementById('rightBtn'), 'right');
-            draw();
-        })();
-
-        // Demo-only forms: do not collect or store passwords.
-        document.querySelectorAll('.auth-form').forEach(form => {
-            form.addEventListener('submit', event => {
-                event.preventDefault();
-                alert('This is a front-end demo. Account sign-in is not connected to a server yet.');
-                form.reset();
-            });
-        });
-
     </script>
 
 </body>
